@@ -1,0 +1,12 @@
+# Keep the build context small. Do NOT exclude go.mod/go.sum or source.
+.git
+.gitignore
+.github
+README.md
+Dockerfile
+.dockerignore
+
+# Local build artifacts
+/server
+*.test
+*.out
