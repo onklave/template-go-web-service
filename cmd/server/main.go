@@ -20,10 +20,22 @@ func main() {
 
 	addr := ":" + getenv("PORT", "8080")
 
+	// Every timeout below is set deliberately. A zero-value timeout on
+	// http.Server means "no deadline", which lets a client hold a connection
+	// open indefinitely (slowloris, trickled bodies, idle keep-alive hoarding).
 	srv := &http.Server{
-		Addr:              addr,
-		Handler:           server.New(logger),
+		Addr:    addr,
+		Handler: server.New(logger),
+
+		// Bounds the request line + headers: the classic slowloris defence.
 		ReadHeaderTimeout: 5 * time.Second,
+		// Bounds headers + body, so a trickled body cannot pin a connection.
+		ReadTimeout: 15 * time.Second,
+		// Bounds the whole response write, so a slow reader cannot pin a
+		// connection. Raise this if a handler streams or does long work.
+		WriteTimeout: 30 * time.Second,
+		// Bounds how long an idle keep-alive connection is retained.
+		IdleTimeout: 60 * time.Second,
 	}
 
 	// Run the server in a goroutine so main can wait on signals.

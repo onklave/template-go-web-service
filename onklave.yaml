@@ -1,0 +1,16 @@
+# Onklave reads this file to build, run and expose this repo: it drives the
+# in-cluster image build, the container port, the health probe and the route.
+# GitHub Actions is not used — nothing in .github/workflows is consulted.
+# To add a second service, add another entry under `services`.
+version: 1
+services:
+  - name: app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    runtime:
+      port: 8080
+      healthPath: /healthz
+    expose:
+      enabled: true
+      path: /

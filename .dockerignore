@@ -10,3 +10,11 @@ Dockerfile
 /server
 *.test
 *.out
+
+# Never let local secrets into the build context: the build stage does
+# "COPY . .", so anything here is readable in that layer and in the build cache.
+.env
+.env.*
+
+# Audit/metadata, not needed to build.
+.onklave

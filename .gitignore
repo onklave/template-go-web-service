@@ -15,6 +15,11 @@ coverage.*
 go.work
 go.work.sum
 
+# Local environment files — keep secrets out of git. Configure the deployed
+# service through Onklave-managed environment variables instead.
+.env
+.env.*
+
 # Editor / OS cruft
 .DS_Store
 .idea/
