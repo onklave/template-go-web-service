@@ -1,3 +1,3 @@
 module github.com/onklave/template-go-web-service
 
-go 1.22
+go 1.26

@@ -29,6 +29,9 @@ Any other path returns `404` (Go 1.22 routing matches `/` exactly).
 
 ## Run locally
 
+Requires **Go 1.26+**, matching `go.mod` and the Dockerfile builder. With the
+default `GOTOOLCHAIN=auto` an older Go fetches the right toolchain automatically.
+
 ```bash
 go run ./cmd/server
 # listens on :8080 by default; override with PORT
