@@ -12,11 +12,18 @@ import (
 	"syscall"
 	"time"
 
+	onklave "github.com/onklave/onklave-go"
+
 	"github.com/onklave/template-go-web-service/internal/server"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+	// Onklave error tracking + feedback. Reads ONKLAVE_ERRORS_INGEST_KEY,
+	// ONKLAVE_ENV and ONKLAVE_COMMIT_SHA; when the key is unset (local dev)
+	// the client is a safe no-op, so it is wired unconditionally.
+	errs := onklave.NewFromEnv("template-go-web-service")
 
 	addr := ":" + getenv("PORT", "8080")
 
@@ -25,7 +32,7 @@ func main() {
 	// open indefinitely (slowloris, trickled bodies, idle keep-alive hoarding).
 	srv := &http.Server{
 		Addr:    addr,
-		Handler: server.New(logger),
+		Handler: server.New(logger, errs),
 
 		// Bounds the request line + headers: the classic slowloris defence.
 		ReadHeaderTimeout: 5 * time.Second,
@@ -54,6 +61,8 @@ func main() {
 	select {
 	case err := <-serverErr:
 		logger.Error("server failed", slog.Any("error", err))
+		errs.CaptureException(err)
+		flushErrors(errs)
 		os.Exit(1)
 	case <-ctx.Done():
 		logger.Info("shutdown signal received")
@@ -65,9 +74,21 @@ func main() {
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("graceful shutdown failed", slog.Any("error", err))
+		errs.CaptureException(err)
+		flushErrors(errs)
 		os.Exit(1)
 	}
+	// Drain any in-flight error captures before the process exits.
+	flushErrors(errs)
 	logger.Info("server stopped cleanly")
+}
+
+// flushErrors gives pending Onklave error sends a bounded window to finish;
+// safe (and instant) on a no-op client.
+func flushErrors(errs *onklave.Client) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	errs.Flush(ctx)
 }
 
 func getenv(key, fallback string) string {

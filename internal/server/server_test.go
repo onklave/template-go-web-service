@@ -10,7 +10,8 @@ import (
 )
 
 func newTestServer() http.Handler {
-	return New(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	// A nil Onklave client is a safe no-op, so tests need no ingest key.
+	return New(slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 }
 
 func TestHealthz(t *testing.T) {
@@ -50,6 +51,21 @@ func TestRoot(t *testing.T) {
 	}
 	if body["service"] == "" {
 		t.Fatalf("root: expected a non-empty service field, got %v", body)
+	}
+}
+
+func TestRecoverPanicsReturns500(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	h := recoverPanics(logger, nil, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("kaboom")
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/panics", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("panic: got status %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
 }
 

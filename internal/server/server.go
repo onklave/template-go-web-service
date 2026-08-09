@@ -3,14 +3,18 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
+
+	onklave "github.com/onklave/onklave-go"
 )
 
 // New returns an http.Handler with all routes registered. Keeping the mux
 // construction here (separate from main) makes the handlers testable without
-// starting a real server.
-func New(logger *slog.Logger) http.Handler {
+// starting a real server. errs may be a no-op (key-less or nil) client —
+// capture calls are then silently skipped.
+func New(logger *slog.Logger, errs *onklave.Client) http.Handler {
 	mux := http.NewServeMux()
 
 	// Go 1.22 enhanced routing: method + path patterns. The "{$}" anchor makes
@@ -19,7 +23,7 @@ func New(logger *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /healthz", handleHealthz())
 	mux.HandleFunc("GET /{$}", handleRoot())
 
-	return logRequests(logger, mux)
+	return recoverPanics(logger, errs, logRequests(logger, mux))
 }
 
 // handleHealthz reports service liveness. Used by Onklave for health checks.
@@ -38,6 +42,38 @@ func handleRoot() http.HandlerFunc {
 			"message": "hello from Onklave",
 		})
 	}
+}
+
+// recoverPanics is the central error path: it converts a handler panic into
+// a 500 response and reports it to Onklave error tracking (fire-and-forget;
+// a no-op client is fine).
+func recoverPanics(logger *slog.Logger, errs *onklave.Client, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			rec := recover()
+			if rec == nil {
+				return
+			}
+			err, ok := rec.(error)
+			if !ok {
+				err = fmt.Errorf("panic: %v", rec)
+			}
+			logger.Error("handler panicked",
+				slog.Any("error", err),
+				slog.String("method", r.Method),
+				slog.String("path", r.URL.Path),
+			)
+			errs.CaptureException(err, onklave.WithRequest(onklave.RequestInfo{
+				Method:     r.Method,
+				Path:       r.URL.Path,
+				StatusCode: http.StatusInternalServerError,
+			}))
+			writeJSON(w, http.StatusInternalServerError, map[string]string{
+				"error": "internal server error",
+			})
+		}()
+		next.ServeHTTP(w, r)
+	})
 }
 
 // logRequests is a tiny middleware logging each request via slog.
