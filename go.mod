@@ -1,5 +1,5 @@
 module github.com/onklave/template-go-web-service
 
-go 1.26
+go 1.27
 
 require github.com/onklave/onklave-go v0.1.0
